@@ -17,7 +17,7 @@ path = "state_dicts/"
 
 
 new_folder_flag = True
-new_folder = "Test_Dynkin_CfD_std2/"
+new_folder = "Test_Dynkin_CfD/"
 
 if new_folder_flag:
     path = new_folder + path
@@ -43,7 +43,7 @@ r = 0.04
 R=0.06
 
 
-x0_value = 4.35 #initial price TODO: change for x0 to come from some (i guess stationary) distribution
+x0_value = 4.35 #initial price
 x_0 = torch.ones(dim_x)*x0_value
 
 
@@ -55,7 +55,6 @@ c_0 = np.exp(x0_value)
 c_1 = -1
 rho = 0.04
 T = 1
-#gamma1 = y_90 #upper barrier
 gamma1 = 1.56 #upper barrier
 gamma2 = 0.31 #lower barrier
 
@@ -81,14 +80,6 @@ x0_value= 0
 x_0 = torch.ones(dim_x)*x0_value
 '''
 
-'''
-kappa=0.25
-mu=35
-sig=20
-c_0 = mu
-c_1 = -1
-rho = 0.1
-'''
 
 def b(t, x):
     return kappa*(mu*torch.ones(x.shape[0], x.shape[1]) - x)
