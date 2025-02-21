@@ -17,7 +17,7 @@ path = "state_dicts/"
 
 
 new_folder_flag = True
-new_folder = "Test_Dynkin_CfD/"
+new_folder = "Test_Dynkin/"
 
 if new_folder_flag:
     path = new_folder + path
@@ -42,7 +42,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 r = 0.04
 R=0.06
 
-
+'''
 x0_value = 4.35 #initial price
 x_0 = torch.ones(dim_x)*x0_value
 
@@ -57,16 +57,16 @@ rho = 0.04
 T = 1
 gamma1 = 1.56 #upper barrier
 gamma2 = 0.31 #lower barrier
-
+'''
 
 ############################
 #BENCHMARK EXAMPLE
-'''
+
 kappa = 2.0  # Speed of mean reversion
 mu = 0.0     # Long-term mean price (USD/MWh)
 sig = 1.0  # Volatility (USD/MWh per sqrt(day))
 K = 0.0      # Strike price (USD/MWh)
-Q = 10       # Quantity (MWh)
+Q = 10      # Quantity (MWh)
 T = 1        # Simulation length (days)
 dt = T/N
 #the payoff function will be Q*(K-P)=c0 + c1*P
@@ -78,7 +78,7 @@ gamma2 = 2 #lower barrier
 T = 1
 x0_value= 0
 x_0 = torch.ones(dim_x)*x0_value
-'''
+
 
 
 def b(t, x):
@@ -273,8 +273,8 @@ plt.show()
 
 j = np.random.randint(batch_size)
 plt.plot(t, y[j, 0, :].detach().numpy(), color="red", label="DRBSDE")
-plt.plot(t, l2_vals[:, 0], color="green", linestyle="dotted", label= r'$f_2(t,X_t)$')
-plt.plot(t, l1_vals[:, 0], color="purple", linestyle="dashed", label= r'$f_1(t,X_t)$' )
+#plt.plot(t, l2_vals[:, 0], color="green", linestyle="dotted", label= r'$f_2(t,X_t)$')
+#plt.plot(t, l1_vals[:, 0], color="purple", linestyle="dashed", label= r'$f_1(t,X_t)$' )
 #plt.plot(t, ytrue[j, 0, :], color="blue", label="Analytical")
 
 plt.legend(loc=(0.75,0.7))
