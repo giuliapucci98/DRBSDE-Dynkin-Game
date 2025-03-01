@@ -7,10 +7,10 @@ import os
 #from RBSDE import BSDEsolver
 #from RBSDE import fbsde
 '''
-from RBSDE2 import fbsde
-from RBSDE2 import BSDEiter
-from RBSDE2 import Model
-from RBSDE2 import Result
+from DRBSDE import fbsde
+from DRBSDE import BSDEiter
+from DRBSDE import Model
+from DRBSDE import Result
 '''
 
 path = "state_dicts/"

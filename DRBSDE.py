@@ -112,16 +112,16 @@ class BSDEsolver():
             w = torch.randn(batch_size, self.equation.dim_d, 1)*np.sqrt(delta_t)
             x_next = x + (self.equation.b(delta_t*0, x)) * delta_t + torch.matmul(self.equation.sigma(delta_t*0, x),
                                                                                   w).reshape(-1, self.equation.dim_x)
-            #x = torch.exp(x)
-            #x_next = torch.exp(x_next)
+            x = torch.exp(x)
+            x_next = torch.exp(x_next)
         else:
             for i in range(n):
                 w = torch.randn(batch_size, self.equation.dim_x, 1)*np.sqrt(delta_t)
                 x = x + (self.equation.b(delta_t * (i), x)) * delta_t + torch.matmul(self.equation.sigma(delta_t * (i), x),w).reshape(-1, self.equation.dim_x)
             w = torch.randn(batch_size, self.equation.dim_d, 1)*np.sqrt(delta_t)
             x_next = x + (self.equation.b(delta_t * (n), x)) * delta_t + torch.matmul(self.equation.sigma(delta_t * (n), x),w).reshape(-1, self.equation.dim_x)
-            #x = torch.exp(x)
-            #x_next = torch.exp(x_next)
+            x = torch.exp(x)
+            x_next = torch.exp(x_next)
         return x, w, x_next
 
     def train(self, batch_size, N, n, itr, path, multiplyer):
@@ -240,8 +240,8 @@ class Result():
         for i in range(N-1):
             w = W[:, :, i].reshape(-1, self.equation.dim_d, 1)
             x[:,:,i+1] = x[:,:,i] + self.equation.b(delta_t * i, x[:,:,i]) * delta_t + torch.matmul(self.equation.sigma(delta_t * i, x[:,:,i]),w).reshape(-1, self.equation.dim_x)
-        #return torch.exp(x)
-        return x
+        return torch.exp(x)
+        #return x
 
     def predict(self,N,batch_size,x, path):
         delta_t = self.equation.T / N
