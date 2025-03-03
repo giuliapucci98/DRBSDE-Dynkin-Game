@@ -110,7 +110,7 @@ def l1(t,x): #upper barrier = when player 1 stops
 
 
 
-
+#Define the FBSDE system
 equation = fbsde(x_0, b, sigma, f, g, l1,l2, T, dim_x, dim_y, dim_d)
 
 
