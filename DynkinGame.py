@@ -1,15 +1,15 @@
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import os
 import json
 
-'''
+
 from DRBSDE import fbsde
 from DRBSDE import BSDEiter
 from DRBSDE import Model
 from DRBSDE import Result
-'''
+
 
 
 
@@ -30,9 +30,10 @@ if new_folder_flag:
 ref_flag = False
 
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 mode = "Training"
-mode = "Testing"
+#mode = "Testing"
 ht_analysis = False
 
 
@@ -47,7 +48,7 @@ def b(t, x):
 
 def sigma(t, x):
     # x: shape [batch_size, dim_x, dim_d]
-    diffusion = torch.zeros(batch_size, dim_x, dim_d)
+    diffusion = torch.zeros(batch_size, dim_x, dim_d, device=device)
     # X: constant diffusion
     diffusion[:, 0, 0] = sig
     # Q1: constant diffusion
@@ -67,12 +68,12 @@ def g(x):
 
 
 def lower_barrier(t,x):  #lower barrier = when player 2 stops
-    return torch.ones(batch_size, dim_y)*(-l)*np.exp(- rho*t)
+    return torch.ones(batch_size, dim_y, device=device)*(-l)*np.exp(- rho*t)
     #return torch.ones(batch_size, dim_y) * (-2) * np.exp(- rho * t)
 
 
 def upper_barrier(t,x): #upper barrier = when player 1 stops
-    return torch.ones(batch_size, dim_y)*(l)*np.exp(-rho*t)
+    return torch.ones(batch_size, dim_y, device=device)*(l)*np.exp(-rho*t)
     #return torch.ones(batch_size, dim_y) * (2) * np.exp(-rho * t)
 
 
@@ -160,7 +161,7 @@ if mode == "Training":
         "l": l,
     }
 
-    x_0 = torch.ones(dim_x)
+    x_0 = torch.ones(dim_x, device=device)
     x_0[0] = x0_value
     x_0[1] = x0_value1
 
@@ -217,7 +218,7 @@ else:
     u = loaded_params["u"]
     l = loaded_params["l"]
 
-    x_0 = torch.ones(dim_x)
+    x_0 = torch.ones(dim_x, device=device)
     x_0[0] = x0_value
     x_0[1] = x0_value1
     equation = fbsde(x_0, b, sigma, f, g, upper_barrier, lower_barrier, T, dim_x, dim_y, dim_d)

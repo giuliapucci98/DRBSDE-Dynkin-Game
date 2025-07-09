@@ -93,6 +93,7 @@ class BSDEsolver():
         #else:
         delta_t = self.equation.T / N
         estimate = y - self.equation.f(delta_t*n, x , y, z)*delta_t + torch.matmul(z, w).reshape(-1, self.equation.dim_y)
+
         dist = (y_prev - estimate).norm(2,dim=1)
         return torch.mean(dist)
 
@@ -100,19 +101,19 @@ class BSDEsolver():
 
     def gen_forward(self, batch_size, N,n):
         delta_t = self.equation.T / N
-        x = self.equation.x_0 + torch.zeros(batch_size, self.equation.dim_x, device=device, requires_grad=True).reshape(
+        x = self.equation.x_0 + torch.zeros(batch_size, self.equation.dim_x, requires_grad=True, device=device).reshape(
             -1, self.equation.dim_x)  # [bs,dx]
         if n==0:
-            w = torch.randn(batch_size, self.equation.dim_d, 1)*np.sqrt(delta_t)
+            w = torch.randn(batch_size, self.equation.dim_d, 1, device=device)*np.sqrt(delta_t)
             x_next = x + (self.equation.b(delta_t*0, x)) * delta_t + torch.matmul(self.equation.sigma(delta_t*0, x),
                                                                                   w).reshape(-1, self.equation.dim_x)
             x = torch.exp(x)
             x_next = torch.exp(x_next)
         else:
             for i in range(n):
-                w = torch.randn(batch_size, self.equation.dim_x, 1)*np.sqrt(delta_t)
+                w = torch.randn(batch_size, self.equation.dim_x, 1, device=device)*np.sqrt(delta_t)
                 x = x + (self.equation.b(delta_t * (i), x)) * delta_t + torch.matmul(self.equation.sigma(delta_t * (i), x),w).reshape(-1, self.equation.dim_x)
-            w = torch.randn(batch_size, self.equation.dim_d, 1)*np.sqrt(delta_t)
+            w = torch.randn(batch_size, self.equation.dim_d, 1, device=device)*np.sqrt(delta_t)
             x_next = x + (self.equation.b(delta_t * (n), x)) * delta_t + torch.matmul(self.equation.sigma(delta_t * (n), x),w).reshape(-1, self.equation.dim_x)
             x = torch.exp(x)
             x_next = torch.exp(x_next)
@@ -146,7 +147,7 @@ class BSDEsolver():
             y,z = self.model(N, n, x)
 
             if n == N-2:
-                y_prev = self.equation.g(x_next)
+                y_prev = self.equation.g(x_next).to(device)
             else:
 
                 y_prev, z_prev = mod2(N,n+1,x_next)
