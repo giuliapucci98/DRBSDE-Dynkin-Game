@@ -53,12 +53,6 @@ class Model(nn.Module):
             sd = torch.std(x,dim=0)
             return (x-mean)/(sd + 0.0001)
 
-        # def phi(x):
-        #     x = torch.tanh(self.bn1(self.linear1(x)))
-        #     x = torch.tanh(self.bn2(self.linear2(x)))
-        #     x = torch.tanh(self.bn3(self.linear3(x)))
-        #     return self.linear4(x) #[bs,(dy*dd)] -> [bs,dy,dd]
-        #
         def phi(x):
             x = torch.tanh(self.linear1(x))
             x = torch.tanh(self.linear2(x))
@@ -139,7 +133,8 @@ class BSDEsolver():
             itr_actual = itr
 
         for i in range(itr_actual):
-
+            if i % 200 == 0:
+                print("itr=" + str(i))
             flag = True
             while flag:
                 x, w, x_next = self.gen_forward(batch_size,N, n)
@@ -151,13 +146,13 @@ class BSDEsolver():
             y,z = self.model(N, n, x)
 
             if n == N-2:
-                y_prev = self.equation.g(x)
+                y_prev = self.equation.g(x_next)
             else:
 
                 y_prev, z_prev = mod2(N,n+1,x_next)
 
 
-            if 0==0:
+            if 0==1:
                 #y_prev = torch.maximum(y_prev, self.equation.l(x_next))
                 y_prev = torch.minimum(torch.maximum(y_prev, self.equation.l2(delta_t*n, x_next)), self.equation.l1(delta_t*n, x_next))
 
@@ -193,7 +188,7 @@ class BSDEiter():
             coeff = 1
             if n==N-2:
                 coeff = 1
-            #print("time "+ str(n))
+            print("time "+ str(n))
             mod = Model(self.equation, self.dim_h).to(device)
             bsde_solver = BSDEsolver(self.equation, self.dim_h, mod, lr, coeff)
             if n != N-2:
@@ -236,12 +231,16 @@ class Result():
 
     def gen_x(self, batch_size, N, W):
         delta_t = self.equation.T / N
-        x = self.equation.x_0 + torch.zeros(batch_size, N * self.equation.dim_x, device=device).reshape(-1,self.equation.dim_x, N) #[bs,dx,N]
+        #x = self.equation.x_0 + torch.zeros(batch_size, N * self.equation.dim_x, device=device).reshape(-1,self.equation.dim_x, N) #[bs,dx,N]
+        x = torch.zeros(batch_size, N, self.equation.dim_x, device=device).reshape(-1, self.equation.dim_x,N)  # [bs,dx,N]
+        x[:, :, 0] = self.equation.x_0.view(1, self.equation.dim_x).expand(x.size(0), -1)
+
         for i in range(N-1):
             w = W[:, :, i].reshape(-1, self.equation.dim_d, 1)
             x[:,:,i+1] = x[:,:,i] + self.equation.b(delta_t * i, x[:,:,i]) * delta_t + torch.matmul(self.equation.sigma(delta_t * i, x[:,:,i]),w).reshape(-1, self.equation.dim_x)
         return torch.exp(x)
         #return x
+
 
     def predict(self,N,batch_size,x, path):
         delta_t = self.equation.T / N
@@ -253,7 +252,7 @@ class Result():
         for n in range(N-1):
             self.model.load_state_dict(torch.load(path + "state_dict_" + str(n)), strict=False)
             y,z = self.model(N, n, x[:,:,n])
-            if 0==0:
+            if 0==1:
                 #y = torch.maximum(y,self.equation.l(x[:,:,n]))
                 y = torch.minimum(torch.maximum(y, self.equation.l2(delta_t*n, x[:, :, n])), self.equation.l1(delta_t*n, x[:, :, n]))
 

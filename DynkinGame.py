@@ -2,10 +2,8 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import json
 
-
-#from RBSDE import BSDEsolver
-#from RBSDE import fbsde
 '''
 from DRBSDE import fbsde
 from DRBSDE import BSDEiter
@@ -13,11 +11,13 @@ from DRBSDE import Model
 from DRBSDE import Result
 '''
 
+
+
 path = "state_dicts/"
 
 
 new_folder_flag = True
-new_folder = "Test_Dynkin/"
+new_folder = "Test2d/"
 
 if new_folder_flag:
     path = new_folder + path
@@ -29,100 +29,201 @@ if new_folder_flag:
     graph_path = new_folder + "Graphs/"
 ref_flag = False
 
-dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 1, 1, 1,11, 50, 200, 2**13
-#x0_value, T, multiplyer = 4, 1, 20
-multiplyer = 5
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-###################################
-#CfD EXAMPLE
-r = 0.04
-R=0.06
-
-'''
-x0_value = 4.35 #initial price
-x_0 = torch.ones(dim_x)*x0_value
-
-
-kappa=23.667704403397515
-mu=4.331928194132446
-sig=0.4321650311213917
-c_0 = np.exp(x0_value)
-#c_0 = x0_value
-c_1 = -1
-rho = 0.04
-T = 1
-gamma1 = 1.56 #upper barrier
-gamma2 = 0.31 #lower barrier
-'''
-
-############################
-#BENCHMARK EXAMPLE
-
-kappa = 2.0  # Speed of mean reversion
-mu = 0.0     # Long-term mean price (USD/MWh)
-sig = 1.0  # Volatility (USD/MWh per sqrt(day))
-K = 0.0      # Strike price (USD/MWh)
-Q = 10      # Quantity (MWh)
-T = 1        # Simulation length (days)
-dt = T/N
-#the payoff function will be Q*(K-P)=c0 + c1*P
-c_0 = K*Q
-c_1 = -Q
-rho = 0
-gamma1 = 2 #upper barrier
-gamma2 = 2 #lower barrier
-T = 1
-x0_value= 0
-x_0 = torch.ones(dim_x)*x0_value
-
+mode = "Training"
+mode = "Testing"
+ht_analysis = False
 
 
 def b(t, x):
-    return kappa*(mu*torch.ones(x.shape[0], x.shape[1]) - x)
-
-
+    # x: shape [batch_size, dim_x]
+    drift = torch.zeros_like(x)
+    # X: OU process
+    drift[:, 0] = kappa * (mu - x[:, 0])
+    # Q1: OU process
+    drift[:, 1] =  kappa1 * (mu1 - x[:, 1])
+    return drift
 
 def sigma(t, x):
-    return torch.ones(batch_size, dim_x, dim_d)*sig
-
-
+    # x: shape [batch_size, dim_x, dim_d]
+    diffusion = torch.zeros(batch_size, dim_x, dim_d)
+    # X: constant diffusion
+    diffusion[:, 0, 0] = sig
+    # Q1: constant diffusion
+    diffusion[:, 1, 1] = sig1
+    return diffusion
 
 
 def f(t, x, y, z):
-    return (c_0 + c_1 * x) * np.exp(- rho * t)
+    value1 = (c_0 + c_1 * x[:, 0])* np.exp(-rho * t)
+    value2 = (d_0 + d_1 * x[:, 1])*np.exp(-rho * t)
+    # output: [batch_size, dim_y]
+    return 0.5*(value1 + value2)
 
 
 def g(x):
-    return 0*torch.ones(x.shape[0], x.shape[1])
+    return 0*torch.ones(x.shape[0], dim_y)
 
 
-def l2(t,x):  #lower barrier = when player 2 stops
-    return torch.ones(batch_size, dim_y)*(-gamma2)*np.exp(- rho*t)
+def lower_barrier(t,x):  #lower barrier = when player 2 stops
+    return torch.ones(batch_size, dim_y)*(-l)*np.exp(- rho*t)
+    #return torch.ones(batch_size, dim_y) * (-2) * np.exp(- rho * t)
 
 
-
-def l1(t,x): #upper barrier = when player 1 stops
-    return torch.ones(batch_size, dim_y)*(gamma1)*np.exp(-rho*t)
-
-
-
-#Define the FBSDE system
-equation = fbsde(x_0, b, sigma, f, g, l1,l2, T, dim_x, dim_y, dim_d)
+def upper_barrier(t,x): #upper barrier = when player 1 stops
+    return torch.ones(batch_size, dim_y)*(l)*np.exp(-rho*t)
+    #return torch.ones(batch_size, dim_y) * (2) * np.exp(-rho * t)
 
 
 
-bsde_itr = BSDEiter(equation, dim_h)
-Y0=[]
-f1 = []
-f2 = []
-for i in range(100):
-    print(f"iteration n {i}")
-    loss, y  = bsde_itr.train_whole(batch_size, N, path, itr, multiplyer)
-    Y0.append(float(y[0, 0]))
+if mode == "Training":
+    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 2, 1, 2,11, 50, 50, 2**13
+    multiplier = 5
+
+    ###################################
+    #CfD EXAMPLE
+    r = 0.04
+    R=0.06
+
+
+    x0_value = 4.35 #initial price
+    x0_value1 = 4.35 #initial price
+
+    kappa=23.667704403397515
+    mu=4.331928194132446
+    sig=0.4321650311213917
+
+    kappa1= kappa
+    mu1= mu
+    sig1 = sig
+
+    c_0 = np.exp(x0_value)
+    #c_0 = x0_value
+    c_1 = -1
+
+    d_0 = c_0
+    d_1 = c_1
+
+
+    rho = 0.04
+    T = 1
+    u = 1.56 #upper barrier
+    l = 0.31 #lower barrier
+
+
+    ############################
+    #BENCHMARK EXAMPLE
+    '''
+    kappa = 2.0  # Speed of mean reversion
+    mu = 0.0     # Long-term mean price (USD/MWh)
+    sig = 1.0  # Volatility (USD/MWh per sqrt(day))
+    K = 0.0      # Strike price (USD/MWh)
+    Q = 10      # Quantity (MWh)
+    T = 1        # Simulation length (days)
+    dt = T/N
+    #the payoff function will be Q*(K-P)=c0 + c1*P
+    c_0 = K*Q
+    c_1 = -Q
+    rho = 0
+    gamma1 = 2 #upper barrier
+    gamma2 = 2 #lower barrier
+    T = 1
+    x0_value= 0
+    x_0 = torch.ones(dim_x)*x0_value
+    '''
+
+    run_parameters = {
+        "dim_x": dim_x,
+        "dim_y": dim_y,
+        "dim_d": dim_d,
+        "dim_h": dim_h,
+        "N": N,
+        "itr": itr,
+        "batch_size": batch_size,
+        "multiplier": multiplier,
+        "x0_value": x0_value,
+        "x0_value1": x0_value1,
+        "kappa": kappa,
+        "mu": mu,
+        "sig": sig,
+        "kappa1": kappa1,
+        "mu1": mu1,
+        "sig1": sig1,
+        "c_0": c_0,
+        "c_1": c_1,
+        "d_0": d_0,
+        "d_1": d_1,
+        "rho": rho,
+        "T": T,
+        "u": u,
+        "l": l,
+    }
+
+    x_0 = torch.ones(dim_x)
+    x_0[0] = x0_value
+    x_0[1] = x0_value1
+
+    #Define the FBSDE system
+    equation = fbsde(x_0, b, sigma, f, g, lower_barrier, upper_barrier, T, dim_x, dim_y, dim_d)
+
+    os.makedirs(path, exist_ok=True)
+
+    with open(os.path.join(path, "params.json"), "w") as h:
+        json.dump(run_parameters, h, indent=2)
+
+
+    bsde_itr = BSDEiter(equation, dim_h)
+    Y0=[]
+    f1 = []
+    f2 = []
+    for i in range(1):
+        print(f"iteration n {i}")
+        loss, y  = bsde_itr.train_whole(batch_size, N, path, itr, multiplier)
+        Y0.append(float(y[0, 0]))
+
+    with open(path + "loss.json", 'w') as f:
+        json.dump(loss, f, indent=2)
+
+
+else:
+
+    with open(os.path.join(path, "params.json"), "r") as h:
+        loaded_params = json.load(h)
+
+    dim_x = loaded_params["dim_x"]
+    dim_y = loaded_params["dim_y"]
+    dim_d = loaded_params["dim_d"]
+    dim_h = loaded_params["dim_h"]
+    N = loaded_params["N"]
+    itr = loaded_params["itr"]
+    batch_size = loaded_params["batch_size"]
+    multiplier = loaded_params["multiplier"]
+
+    x0_value = loaded_params["x0_value"]
+    x0_value1 = loaded_params["x0_value1"]
+    kappa = loaded_params["kappa"]
+    mu = loaded_params["mu"]
+    sig = loaded_params["sig"]
+    kappa1 = loaded_params["kappa1"]
+    mu1 = loaded_params["mu1"]
+    sig1 = loaded_params["sig1"]
+    c_0 = loaded_params["c_0"]
+    c_1 = loaded_params["c_1"]
+    d_0 = loaded_params["d_0"]
+    d_1 = loaded_params["d_1"]
+    rho = loaded_params["rho"]
+    T = loaded_params["T"]
+    u = loaded_params["u"]
+    l = loaded_params["l"]
+
+    x_0 = torch.ones(dim_x)
+    x_0[0] = x0_value
+    x_0[1] = x0_value1
+    equation = fbsde(x_0, b, sigma, f, g, upper_barrier, lower_barrier, T, dim_x, dim_y, dim_d)
+
+    with open(path + "loss.json", 'r') as f:
+        loss = json.load(f)
 
     model = Model(equation, dim_h)
     model.eval()
@@ -150,18 +251,134 @@ for i in range(100):
     t = torch.linspace(0, T, N)
     ############################
 
-    hitting_times_lower = []
-    actual_hitting_times_lower = []
-    prices_at_lower_stopping = []
+    x_np = x.detach().numpy()  # Shape: (batch_size, dim_x, N)
+    y_np = y.detach().numpy()  # Shape: (batch_size, dim_y, N)
+    z_np = z.detach().numpy()
 
-    hitting_times_upper = []
-    actual_hitting_times_upper = []
-    prices_at_upper_stopping = []
+    lower_np = lower_barrier(t, x).detach().numpy()
+    upper_np = upper_barrier(t, x).detach().numpy()
 
-    l1_vals = torch.stack([l1(t_, x[0, 0, :]) for t_ in t]).detach().numpy()
-    l2_vals = torch.stack([l2(t_, x[0, 0, :]) for t_ in t]).detach().numpy()
+    ####### PLOTS ###############################
+    # loss analysis
+    fig, axes = plt.subplots(2, 2, figsize=(10, 6))
+    # X-axes
+    itr_ax_fine = np.linspace(1, itr * multiplyer, itr * multiplyer)
+    itr_ax_coarse = np.linspace(1, itr, itr)
+    # Subplot 1: Loss N-1
+    axes[0, 0].plot(itr_ax_fine, loss[0])
+    axes[0, 0].set_title("Loss at time step N-1")
+    # Subplot 2: Loss N-2
+    axes[0, 1].plot(itr_ax_fine, loss[1])
+    axes[0, 1].set_title("Loss at time step N-2")
+    # Subplot 3: Loss N-3
+    axes[1, 0].plot(itr_ax_coarse, loss[2])
+    axes[1, 0].set_title("Loss at time step N-3")
+    # Subplot 4: Loss N-5
+    axes[1, 1].plot(itr_ax_coarse, loss[5])
+    axes[1, 1].set_title("Loss at time step N-5")
+    for ax in axes.flat:
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Loss")
+    plt.tight_layout()
+    plt.savefig(graph_path + "loss_grid.png")
+    plt.show()
+
+
+
+    j = np.random.randint(batch_size)
+    fig, axes = plt.subplots(dim_x, 1, figsize=(12, 9), sharex=True)
+    axes[0].plot(t, x_np[j, 0, :], label="Electricity Price P")
+    axes[1].plot(t, x_np[j, 1, :], label="X1")
+    axes[0].set_title("Electricity price P over Time")
+    axes[1].set_title("X1")
+    for ax in axes:
+        ax.set_ylabel("Value")
+        ax.grid(True)
+    axes[1].set_xlabel("Time")
+    plt.tight_layout()
+    axes[1].legend()
+    plt.show()
+
+    j = np.random.randint(batch_size)
+    fig, axes = plt.subplots(1, 1, figsize=(8, 6), sharex=True)
+    # Plot Y_1 (dim 0)
+    plt.plot(t, y[j, 0, :].detach().numpy(), color="red", label="Y_1")
+    plt.plot(t, upper_np[j,:], color="blue")
+    plt.plot(t, lower_np[j,:], color="green")
+    #axes[0].legend(loc="upper right")
+    plt.title("Y")
+    plt.tight_layout()
+    plt.savefig(graph_path + str(j))
+    plt.show()
+
+if ht_analysis:
+    hitting_times_lower1 = []
+    actual_hitting_times_lower1 = []
+    prices_at_lower_stopping1 = []
+
+    hitting_times_upper1 = []
+    actual_hitting_times_upper1 = []
+    prices_at_upper_stopping1 = []
+
+    hitting_times_lower2 = []
+    actual_hitting_times_lower2 = []
+    prices_at_lower_stopping2 = []
+
+    hitting_times_upper2 = []
+    actual_hitting_times_upper2 = []
+    prices_at_upper_stopping2 = []
 
     for j in range(batch_size):
+
+        y1_numpy = y[j,0 :].detach().numpy()
+
+        x_numpy = x[j, 0, :].detach().numpy()  # Price process for batch element i
+
+        # Check lower stopping barrier for y1
+        hit_lower1 = (y1_numpy <= lower_np[j, :]).nonzero()[0]
+        if len(hit_lower1) > 0:
+            hit_time1 = hit_lower1[0].item()
+            hitting_times_lower1.append(hit_time1)
+            actual_hitting_times_lower1.append(hit_time1)
+            prices_at_lower_stopping1.append(x_numpy[hit_time1])  # Store price at hitting time
+        else:
+            hitting_times_lower1.append(N)
+
+        # Check upper stopping barrier for y1
+        hit_upper1 = (y1_numpy >= upper_np[j, :]).nonzero()[0]
+        if len(hit_upper1) > 0:
+            hit_time1 = hit_upper1[0].item()
+            hitting_times_upper1.append(hit_time1)
+            actual_hitting_times_upper1.append(hit_time1)
+            prices_at_upper_stopping1.append(x_numpy[hit_time1])  # Store price at hitting time
+        else:
+            hitting_times_upper1.append(N)
+
+    hitting_times_lower1 = np.array(hitting_times_lower1)
+    hitting_times_upper1 = np.array(hitting_times_upper1)
+
+    actual_hitting_times_lower1 = np.array(actual_hitting_times_lower1)
+    actual_hitting_times_upper1 = np.array(actual_hitting_times_upper1)
+
+    hitting_times_lower_time1 = hitting_times_lower1 / N
+    hitting_times_upper_time1 = hitting_times_upper1 / N
+
+    actual_hitting_times_upper_time1 = actual_hitting_times_upper1 / N
+    actual_hitting_times_lower_time1 = actual_hitting_times_lower1 / N
+
+    number_exit_times_lower1 = len(actual_hitting_times_lower1)
+    number_exit_times_upper1 = len(actual_hitting_times_upper1)
+
+    plt.hist(actual_hitting_times_lower_time1, bins=10, alpha=0.5, label=r'Exit times for Player 1')
+    plt.hist(actual_hitting_times_upper_time1, bins=10, alpha=0.5, label=r'Exit times for Player 0')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(graph_path + "hitting_times")
+    plt.show()
+
+
+'''
+for j in range(batch_size):
 
         y_numpy = y[j, 0, :].detach().numpy()
         x_numpy = x[j, 0, :].detach().numpy()  # Price process for batch element i
@@ -201,6 +418,8 @@ for i in range(100):
     # Percent of times player 1/2 stops
     f1.append(len(actual_hitting_times_upper) / batch_size)
     f2.append(len(actual_hitting_times_lower) / batch_size)
+
+
 
 
 Y0_np = np.array(Y0)
@@ -246,6 +465,21 @@ time = torch.unsqueeze(t, dim=0)
 time = torch.unsqueeze(time, dim=0)
 time = torch.repeat_interleave(time, repeats=batch_size, dim=0)
 
+term1 = (c_0 + c_1 * mu) * (T - time)
+term2 = c_1 / kappa * (x_0 - mu) * (np.exp(-kappa * T) - torch.exp(-kappa * time))
+
+exp_kappa_t = torch.exp(kappa * t)  # Shape: (N,)
+exp_neg_kappa_t = torch.exp(-kappa * t)  # Shape: (N,)
+
+inner_integral = torch.zeros(batch_size, dim_d, N)  # To store results for all t
+outer_integral = torch.zeros(batch_size, dim_d, N)
+
+for i in range(N):  # For each time t[i]
+    inner_integral[:, :, i] = torch.sum(exp_kappa_t[:i] * W[:, :, :i], dim=-1)
+    outer_integral[:, :, i] = torch.sum(exp_neg_kappa_t[i-1:] * (T / N))
+
+ytrue = term1 + term2 + sig * c_1 * outer_integral* inner_integral
+
 #
 #
 # term1 = (c_0 + c_1 * mu) * (T - time)
@@ -273,8 +507,10 @@ plt.show()
 
 j = np.random.randint(batch_size)
 plt.plot(t, y[j, 0, :].detach().numpy(), color="red", label="DRBSDE")
-#plt.plot(t, l2_vals[:, 0], color="green", linestyle="dotted", label= r'$f_2(t,X_t)$')
-#plt.plot(t, l1_vals[:, 0], color="purple", linestyle="dashed", label= r'$f_1(t,X_t)$' )
+#plt.plot(t,ytrue[j,0,:], color="blue", label="Analytical")
+
+plt.plot(t, l2_vals[:, 0], color="green", linestyle="dotted", label= r'f_2(t,X_t)')
+plt.plot(t, l1_vals[:, 0], color="purple", linestyle="dashed", label= r'f_1(t,X_t)' )
 #plt.plot(t, ytrue[j, 0, :], color="blue", label="Analytical")
 
 plt.legend(loc=(0.75,0.7))
@@ -282,6 +518,20 @@ plt.savefig(graph_path + str(j))
 plt.show()
 
 
+
+j_indices = np.random.randint(batch_size, size=2)  # 3 random realizations
+colors = ["red", "blue", "brown"]
+for idx, j in enumerate(j_indices):
+    label = f"Y_t realization {j_indices[idx]}" #if idx == 0 else None  # only label the first curve
+    plt.plot(t, y[j, 0, :].detach().numpy(), color=colors[idx], label=label)
+plt.plot(t, l2_vals[:, 0], color="green", linestyle="dotted", label=r'-f_2(t,X_t)')
+plt.plot(t, l1_vals[:, 0], color="purple", linestyle="dashed", label=r'f_1(t,X_t)')
+
+# Show legend (optional: comment out to hide legend)
+plt.legend(loc=(0.75, 0.7))
+
+plt.savefig(graph_path + str(j_indices[0]))
+plt.show()
 
 
 #################################
@@ -399,7 +649,7 @@ print("Percentage of exits for player 1: ", len(actual_hitting_times_upper) / ba
 print("Percentage of exits for player 2: ", len(actual_hitting_times_lower) / batch_size)
 
 
-
+'''
 
 
 
