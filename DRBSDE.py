@@ -94,7 +94,7 @@ class BSDEsolver():
         delta_t = self.equation.T / N
         estimate = y - self.equation.f(delta_t*n, x , y, z)*delta_t + torch.matmul(z, w).reshape(-1, self.equation.dim_y)
 
-        dist = (y_prev - estimate).norm(2,dim=1)
+        dist = (y_prev - estimate).norm(2,dim=1)**2
         return torch.mean(dist)
 
 

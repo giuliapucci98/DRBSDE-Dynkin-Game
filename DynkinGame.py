@@ -1,9 +1,10 @@
 import torch
 import numpy as np
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import os
 import json
 
+from networkx.utils.decorators import np_random_state
 
 from DRBSDE import fbsde
 from DRBSDE import BSDEiter
@@ -33,34 +34,33 @@ ref_flag = False
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 mode = "Training"
-#mode = "Testing"
+mode = "Testing"
 ht_analysis = False
 
 
 def b(t, x):
     # x: shape [batch_size, dim_x]
-    drift = torch.zeros_like(x)
+    mu_t = torch.tensor(mu)
+    kappa_t = torch.tensor(kappa)
+
+    drift = kappa_t*(mu_t - x)
     # X: OU process
-    drift[:, 0] = kappa * (mu - x[:, 0])
-    # Q1: OU process
-    drift[:, 1] =  kappa1 * (mu1 - x[:, 1])
     return drift
 
 def sigma(t, x):
     # x: shape [batch_size, dim_x, dim_d]
-    diffusion = torch.zeros(batch_size, dim_x, dim_d, device=device)
-    # X: constant diffusion
-    diffusion[:, 0, 0] = sig
-    # Q1: constant diffusion
-    diffusion[:, 1, 1] = sig1
-    return diffusion
+    sig_t = torch.tensor(sig)
+    diag_matrix = torch.diag_embed(sig_t).unsqueeze(0).repeat(batch_size, 1, 1)
+
+    return diag_matrix
 
 
 def f(t, x, y, z):
-    value1 = (c_0 + c_1 * x[:, 0])* np.exp(-rho * t)
-    value2 = (d_0 + d_1 * x[:, 1])*np.exp(-rho * t)
+    c_0 = torch.ones(dim_x)*np.exp(x0_value)
+    value = (c_0 - x)* np.exp(-rho * t)
     # output: [batch_size, dim_y]
-    return 0.5*(value1 + value2)
+    return torch.mean(value, dim=-1, keepdim=True)
+    #return value1
 
 
 def g(x):
@@ -79,39 +79,38 @@ def upper_barrier(t,x): #upper barrier = when player 1 stops
 
 
 if mode == "Training":
-    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 2, 1, 2,11, 50, 50, 2**13
+
+    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 2, 1, 2, 11, 50, 50, 2 ** 10
     multiplier = 5
 
     ###################################
-    #CfD EXAMPLE
+    # CfD EXAMPLE
     r = 0.04
-    R=0.06
+    R = 0.06
 
+    x0_value = 4.35  # initial price
+    x0_value1 = 4.35  # initial price
 
-    x0_value = 4.35 #initial price
-    x0_value1 = 4.35 #initial price
+    kappa = np.random.random(dim_x)*0.1 + 23.667704403397515
+    kappa = kappa.tolist()
+    mu = np.random.random(dim_x)*0.1 +4.331928194132446
+    mu = mu.tolist()
+    sig = np.random.random(dim_x)*0.4321650311213917
+    sig = sig.tolist()
 
-    kappa=23.667704403397515
-    mu=4.331928194132446
-    sig=0.4321650311213917
-
-    kappa1= kappa
-    mu1= mu
+    kappa1 = kappa
+    mu1 = mu
     sig1 = sig
 
+
+
     c_0 = np.exp(x0_value)
-    #c_0 = x0_value
-    c_1 = -1
-
-    d_0 = c_0
-    d_1 = c_1
-
+    # c_0 = x0_value
 
     rho = 0.04
     T = 1
-    u = 1.56 #upper barrier
-    l = 0.31 #lower barrier
-
+    u = 1.56  # upper barrier
+    l = 0.31  # lower barrier
 
     ############################
     #BENCHMARK EXAMPLE
@@ -152,9 +151,6 @@ if mode == "Training":
         "mu1": mu1,
         "sig1": sig1,
         "c_0": c_0,
-        "c_1": c_1,
-        "d_0": d_0,
-        "d_1": d_1,
         "rho": rho,
         "T": T,
         "u": u,
@@ -210,13 +206,12 @@ else:
     mu1 = loaded_params["mu1"]
     sig1 = loaded_params["sig1"]
     c_0 = loaded_params["c_0"]
-    c_1 = loaded_params["c_1"]
-    d_0 = loaded_params["d_0"]
-    d_1 = loaded_params["d_1"]
     rho = loaded_params["rho"]
     T = loaded_params["T"]
     u = loaded_params["u"]
     l = loaded_params["l"]
+
+
 
     x_0 = torch.ones(dim_x, device=device)
     x_0[0] = x0_value
@@ -263,7 +258,7 @@ else:
     # loss analysis
     fig, axes = plt.subplots(2, 2, figsize=(10, 6))
     # X-axes
-    itr_ax_fine = np.linspace(1, itr * multiplyer, itr * multiplyer)
+    itr_ax_fine = np.linspace(1, itr * multiplier, itr * multiplier)
     itr_ax_coarse = np.linspace(1, itr, itr)
     # Subplot 1: Loss N-1
     axes[0, 0].plot(itr_ax_fine, loss[0])
