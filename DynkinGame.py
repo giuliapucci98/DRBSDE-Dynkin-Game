@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 import json
 
@@ -18,7 +17,7 @@ path = "state_dicts/"
 
 
 new_folder_flag = True
-new_folder = "Test2d/"
+new_folder = "Test2d_2/"
 
 if new_folder_flag:
     path = new_folder + path
@@ -32,6 +31,8 @@ ref_flag = False
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print(device)
+
 
 mode = "Training"
 mode = "Testing"
@@ -40,8 +41,8 @@ ht_analysis = False
 
 def b(t, x):
     # x: shape [batch_size, dim_x]
-    mu_t = torch.tensor(mu)
-    kappa_t = torch.tensor(kappa)
+    mu_t = torch.tensor(mu, device = device)
+    kappa_t = torch.tensor(kappa, device = device)
 
     drift = kappa_t*(mu_t - x)
     # X: OU process
@@ -49,14 +50,14 @@ def b(t, x):
 
 def sigma(t, x):
     # x: shape [batch_size, dim_x, dim_d]
-    sig_t = torch.tensor(sig)
+    sig_t = torch.tensor(sig, device = device)
     diag_matrix = torch.diag_embed(sig_t).unsqueeze(0).repeat(batch_size, 1, 1)
 
     return diag_matrix
 
 
 def f(t, x, y, z):
-    c_0 = torch.ones(dim_x)*np.exp(x0_value)
+    c_0 = torch.ones(dim_x, device = device )*np.exp(x0_value)
     value = (c_0 - x)* np.exp(-rho * t)
     # output: [batch_size, dim_y]
     return torch.mean(value, dim=-1, keepdim=True)
@@ -64,7 +65,7 @@ def f(t, x, y, z):
 
 
 def g(x):
-    return 0*torch.ones(x.shape[0], dim_y)
+    return 0*torch.ones(x.shape[0], dim_y, device = device)
 
 
 def lower_barrier(t,x):  #lower barrier = when player 2 stops
@@ -80,7 +81,7 @@ def upper_barrier(t,x): #upper barrier = when player 1 stops
 
 if mode == "Training":
 
-    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 2, 1, 2, 11, 50, 50, 2 ** 10
+    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 20, 1, 20, 50, 50, 50, 2 ** 10
     multiplier = 5
 
     ###################################
@@ -91,11 +92,16 @@ if mode == "Training":
     x0_value = 4.35  # initial price
     x0_value1 = 4.35  # initial price
 
-    kappa = np.random.random(dim_x)*0.1 + 23.667704403397515
+    #kappa = np.random.random(dim_x)*0.1 + 23.667704403397515
+    kappa = np.ones(dim_x)*23.667704403397515
     kappa = kappa.tolist()
-    mu = np.random.random(dim_x)*0.1 +4.331928194132446
+
+    #mu = np.random.random(dim_x)*0.1 +4.331928194132446
+    mu = np.ones(dim_x)*4.331928194132446
     mu = mu.tolist()
-    sig = np.random.random(dim_x)*0.4321650311213917
+
+    #sig = np.random.random(dim_x)*0.4321650311213917
+    sig = np.ones(dim_x) * 0.4321650311213917
     sig = sig.tolist()
 
     kappa1 = kappa
@@ -157,9 +163,9 @@ if mode == "Training":
         "l": l,
     }
 
-    x_0 = torch.ones(dim_x, device=device)
-    x_0[0] = x0_value
-    x_0[1] = x0_value1
+    x_0 = torch.ones(dim_x, device=device)*x0_value
+    #x_0[0] = x0_value
+    #x_0[1] = x0_value1
 
     #Define the FBSDE system
     equation = fbsde(x_0, b, sigma, f, g, lower_barrier, upper_barrier, T, dim_x, dim_y, dim_d)
@@ -184,6 +190,7 @@ if mode == "Training":
 
 
 else:
+    import matplotlib.pyplot as plt
 
     with open(os.path.join(path, "params.json"), "r") as h:
         loaded_params = json.load(h)
@@ -213,9 +220,8 @@ else:
 
 
 
-    x_0 = torch.ones(dim_x, device=device)
-    x_0[0] = x0_value
-    x_0[1] = x0_value1
+    x_0 = torch.ones(dim_x, device=device)*x0_value
+
     equation = fbsde(x_0, b, sigma, f, g, upper_barrier, lower_barrier, T, dim_x, dim_y, dim_d)
 
     with open(path + "loss.json", 'r') as f:
@@ -279,20 +285,19 @@ else:
     plt.savefig(graph_path + "loss_grid.png")
     plt.show()
 
-
-
     j = np.random.randint(batch_size)
-    fig, axes = plt.subplots(dim_x, 1, figsize=(12, 9), sharex=True)
-    axes[0].plot(t, x_np[j, 0, :], label="Electricity Price P")
-    axes[1].plot(t, x_np[j, 1, :], label="X1")
-    axes[0].set_title("Electricity price P over Time")
-    axes[1].set_title("X1")
-    for ax in axes:
-        ax.set_ylabel("Value")
-        ax.grid(True)
-    axes[1].set_xlabel("Time")
+
+    plt.figure(figsize=(12, 6))
+    for i in range(dim_x):
+        plt.plot(t, x_np[j, i, :], label=f"x[{i}]")
+
+    plt.title("All Dimensions of x over Time (Sample {})".format(j))
+    plt.xlabel("Time")
+    plt.ylabel("Value")
+    plt.grid(True)
+    #plt.legend()
     plt.tight_layout()
-    axes[1].legend()
+    plt.savefig(graph_path + f"x_{j}.png")
     plt.show()
 
     j = np.random.randint(batch_size)

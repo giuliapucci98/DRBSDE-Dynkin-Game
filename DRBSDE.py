@@ -251,7 +251,7 @@ class Result():
 
 
         for n in range(N-1):
-            self.model.load_state_dict(torch.load(path + "state_dict_" + str(n)), strict=False)
+            self.model.load_state_dict(torch.load(path + "state_dict_" + str(n),map_location=torch.device('cpu')), strict=False)
             y,z = self.model(N, n, x[:,:,n])
             if 0==1:
                 #y = torch.maximum(y,self.equation.l(x[:,:,n]))
