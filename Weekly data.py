@@ -14,13 +14,13 @@ def simulate(x0, kappa, mu, sigma, T, dt=1):
     return X
 
 # Load data
-data = pd.read_csv("../Calibrate_Parameters/european_wholesale_electricity_price_data_daily.csv")
+data = pd.read_csv("../DRBSDE-Dynkin-Game/european_wholesale_electricity_price_data_daily.csv")
 data['Date'] = pd.to_datetime(data['Date'])
 data = data.sort_values('Date')
 
-country_name = "Norway"
-start_date = "2023-01-01"
-end_date = "2025-01-01"
+country_name = "France"
+start_date = "2022-01-01"
+end_date = "2025-07-01"
 
 filtered_data = data[(data['Date'] >= start_date) & (data['Date'] <= end_date) & (data['Country'] == country_name)].copy()
 filtered_data = filtered_data[filtered_data["Price (EUR/MWhe)"] > 0]
