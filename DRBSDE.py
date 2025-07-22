@@ -11,14 +11,14 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class fbsde():
-    def __init__(self, x_0, b, sigma, f, g, l1, l2, T, dim_x, dim_y, dim_d):
+    def __init__(self, x_0, b, sigma, f, g, lower, upper, T, dim_x, dim_y, dim_d):
         self.x_0 = x_0
         self.b = b
         self.sigma = sigma
         self.f = f
         self.g = g
-        self.l1 = l1
-        self.l2=l2
+        self.lower = lower #lower
+        self.upper=upper #upper
         self.T = T
         self.dim_x = dim_x
         self.dim_y = dim_y
@@ -86,7 +86,6 @@ class BSDEsolver():
         self.optimizer = torch.optim.Adam(self.model.parameters(),lr*coeff)
         self.dim_h = dim_h
 
-
     def loss(self, x, n, y_prev, y, z, w, N):
         #if n == N-2:
         #    dist = (y - self.equation.g(x)).norm(2,dim=1)
@@ -107,16 +106,16 @@ class BSDEsolver():
             w = torch.randn(batch_size, self.equation.dim_d, 1, device=device)*np.sqrt(delta_t)
             x_next = x + (self.equation.b(delta_t*0, x)) * delta_t + torch.matmul(self.equation.sigma(delta_t*0, x),
                                                                                   w).reshape(-1, self.equation.dim_x)
-            x = torch.exp(x)
-            x_next = torch.exp(x_next)
+            #x = torch.exp(x)
+            #x_next = torch.exp(x_next)
         else:
             for i in range(n):
                 w = torch.randn(batch_size, self.equation.dim_x, 1, device=device)*np.sqrt(delta_t)
                 x = x + (self.equation.b(delta_t * (i), x)) * delta_t + torch.matmul(self.equation.sigma(delta_t * (i), x),w).reshape(-1, self.equation.dim_x)
             w = torch.randn(batch_size, self.equation.dim_d, 1, device=device)*np.sqrt(delta_t)
             x_next = x + (self.equation.b(delta_t * (n), x)) * delta_t + torch.matmul(self.equation.sigma(delta_t * (n), x),w).reshape(-1, self.equation.dim_x)
-            x = torch.exp(x)
-            x_next = torch.exp(x_next)
+            #x = torch.exp(x)
+            #x_next = torch.exp(x_next)
         return x, w, x_next
 
     def train(self, batch_size, N, n, itr, path, multiplyer):
@@ -153,9 +152,9 @@ class BSDEsolver():
                 y_prev, z_prev = mod2(N,n+1,x_next)
 
 
-            if 0==1:
+            if 0==0:
                 #y_prev = torch.maximum(y_prev, self.equation.l(x_next))
-                y_prev = torch.minimum(torch.maximum(y_prev, self.equation.l2(delta_t*n, x_next)), self.equation.l1(delta_t*n, x_next))
+                y_prev = torch.minimum(torch.maximum(y_prev, self.equation.lower(delta_t*n, x_next)), self.equation.upper(delta_t*n, x_next))
 
 
 
@@ -239,8 +238,8 @@ class Result():
         for i in range(N-1):
             w = W[:, :, i].reshape(-1, self.equation.dim_d, 1)
             x[:,:,i+1] = x[:,:,i] + self.equation.b(delta_t * i, x[:,:,i]) * delta_t + torch.matmul(self.equation.sigma(delta_t * i, x[:,:,i]),w).reshape(-1, self.equation.dim_x)
-        return torch.exp(x)
-        #return x
+        #return torch.exp(x)
+        return x
 
 
     def predict(self,N,batch_size,x, path):
@@ -253,9 +252,9 @@ class Result():
         for n in range(N-1):
             self.model.load_state_dict(torch.load(path + "state_dict_" + str(n),map_location=torch.device('cpu')), strict=False)
             y,z = self.model(N, n, x[:,:,n])
-            if 0==1:
+            if 0==0:
                 #y = torch.maximum(y,self.equation.l(x[:,:,n]))
-                y = torch.minimum(torch.maximum(y, self.equation.l2(delta_t*n, x[:, :, n])), self.equation.l1(delta_t*n, x[:, :, n]))
+                y = torch.minimum(torch.maximum(y, self.equation.lower(delta_t*n, x[:, :, n])), self.equation.upper(delta_t*n, x[:, :, n]))
 
 
             ys[:,:,n] = y

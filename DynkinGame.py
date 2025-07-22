@@ -4,20 +4,19 @@ import os
 import json
 
 from networkx.utils.decorators import np_random_state
-
+'''
 from DRBSDE import fbsde
 from DRBSDE import BSDEiter
 from DRBSDE import Model
 from DRBSDE import Result
-
-
+'''
 
 
 path = "state_dicts/"
 
 
 new_folder_flag = True
-new_folder = "Test2d_2/"
+new_folder = "Comparison/"
 
 if new_folder_flag:
     path = new_folder + path
@@ -36,36 +35,44 @@ print(device)
 
 mode = "Training"
 mode = "Testing"
-ht_analysis = False
+ht_analysis = True
 
 
 def b(t, x):
     # x: shape [batch_size, dim_x]
     mu_t = torch.tensor(mu, device = device)
     kappa_t = torch.tensor(kappa, device = device)
-
     drift = kappa_t*(mu_t - x)
     # X: OU process
+
     return drift
 
 def sigma(t, x):
     # x: shape [batch_size, dim_x, dim_d]
     sig_t = torch.tensor(sig, device = device)
     diag_matrix = torch.diag_embed(sig_t).unsqueeze(0).repeat(batch_size, 1, 1)
-
     return diag_matrix
 
 
+
+
+
 def f(t, x, y, z):
-    c_0 = torch.ones(dim_x, device = device )*np.exp(x0_value)
-    value = (c_0 - x)* np.exp(-rho * t)
-    # output: [batch_size, dim_y]
+    #CfD
+    #c_0 = torch.ones(dim_x, device = device )*np.exp(x0_value)
+
+    #Benchmark example
+    c_0 = torch.zeros(dim_x, device = device)
+    value = 10*(c_0 - x)* np.exp(-rho * t)
+    #output: [batch_size, dim_y]
     return torch.mean(value, dim=-1, keepdim=True)
     #return value1
 
 
+
 def g(x):
     return 0*torch.ones(x.shape[0], dim_y, device = device)
+
 
 
 def lower_barrier(t,x):  #lower barrier = when player 2 stops
@@ -74,23 +81,25 @@ def lower_barrier(t,x):  #lower barrier = when player 2 stops
 
 
 def upper_barrier(t,x): #upper barrier = when player 1 stops
-    return torch.ones(batch_size, dim_y, device=device)*(l)*np.exp(-rho*t)
+    return torch.ones(batch_size, dim_y, device=device)*(u)*np.exp(-rho*t)
     #return torch.ones(batch_size, dim_y) * (2) * np.exp(-rho * t)
 
 
 
 if mode == "Training":
 
-    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 20, 1, 20, 50, 50, 50, 2 ** 10
+    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 20, 1, 20, 100, 50, 100, 2 ** 10
     multiplier = 5
 
     ###################################
+    '''
     # CfD EXAMPLE
     r = 0.04
     R = 0.06
 
     x0_value = 4.35  # initial price
     x0_value1 = 4.35  # initial price
+
 
     #kappa = np.random.random(dim_x)*0.1 + 23.667704403397515
     kappa = np.ones(dim_x)*23.667704403397515
@@ -117,27 +126,29 @@ if mode == "Training":
     T = 1
     u = 1.56  # upper barrier
     l = 0.31  # lower barrier
-
+'''
     ############################
     #BENCHMARK EXAMPLE
-    '''
-    kappa = 2.0  # Speed of mean reversion
-    mu = 0.0     # Long-term mean price (USD/MWh)
-    sig = 1.0  # Volatility (USD/MWh per sqrt(day))
-    K = 0.0      # Strike price (USD/MWh)
-    Q = 10      # Quantity (MWh)
-    T = 1        # Simulation length (days)
+
+    kappa = 1.5 + np.random.random(dim_x)
+    kappa = kappa.tolist()
+
+    mu = np.zeros(dim_x)
+    mu = mu.tolist()
+
+    sig = np.ones(dim_x)
+    sig = sig.tolist()
+
+    T = 1
     dt = T/N
-    #the payoff function will be Q*(K-P)=c0 + c1*P
-    c_0 = K*Q
-    c_1 = -Q
+
     rho = 0
-    gamma1 = 2 #upper barrier
-    gamma2 = 2 #lower barrier
+    u = 0.5 #upper barrier
+    l = 0.5 #lower barrier
     T = 1
     x0_value= 0
     x_0 = torch.ones(dim_x)*x0_value
-    '''
+
 
     run_parameters = {
         "dim_x": dim_x,
@@ -149,14 +160,9 @@ if mode == "Training":
         "batch_size": batch_size,
         "multiplier": multiplier,
         "x0_value": x0_value,
-        "x0_value1": x0_value1,
         "kappa": kappa,
         "mu": mu,
         "sig": sig,
-        "kappa1": kappa1,
-        "mu1": mu1,
-        "sig1": sig1,
-        "c_0": c_0,
         "rho": rho,
         "T": T,
         "u": u,
@@ -188,6 +194,8 @@ if mode == "Training":
     with open(path + "loss.json", 'w') as f:
         json.dump(loss, f, indent=2)
 
+    with open(path + "Y0.json", 'w') as f:
+        json.dump(Y0, f, indent=2)
 
 else:
     import matplotlib.pyplot as plt
@@ -205,14 +213,11 @@ else:
     multiplier = loaded_params["multiplier"]
 
     x0_value = loaded_params["x0_value"]
-    x0_value1 = loaded_params["x0_value1"]
+
     kappa = loaded_params["kappa"]
     mu = loaded_params["mu"]
     sig = loaded_params["sig"]
-    kappa1 = loaded_params["kappa1"]
-    mu1 = loaded_params["mu1"]
-    sig1 = loaded_params["sig1"]
-    c_0 = loaded_params["c_0"]
+
     rho = loaded_params["rho"]
     T = loaded_params["T"]
     u = loaded_params["u"]
@@ -222,7 +227,7 @@ else:
 
     x_0 = torch.ones(dim_x, device=device)*x0_value
 
-    equation = fbsde(x_0, b, sigma, f, g, upper_barrier, lower_barrier, T, dim_x, dim_y, dim_d)
+    equation = fbsde(x_0, b, sigma, f, g, lower_barrier, upper_barrier, T, dim_x, dim_y, dim_d)
 
     with open(path + "loss.json", 'r') as f:
         loss = json.load(f)
@@ -303,7 +308,8 @@ else:
     j = np.random.randint(batch_size)
     fig, axes = plt.subplots(1, 1, figsize=(8, 6), sharex=True)
     # Plot Y_1 (dim 0)
-    plt.plot(t, y[j, 0, :].detach().numpy(), color="red", label="Y_1")
+    for j in range(20):
+        plt.plot(t, y[j, 0, :].detach().numpy(), color="red", label="Y_1")
     plt.plot(t, upper_np[j,:], color="blue")
     plt.plot(t, lower_np[j,:], color="green")
     #axes[0].legend(loc="upper right")
@@ -311,6 +317,7 @@ else:
     plt.tight_layout()
     plt.savefig(graph_path + str(j))
     plt.show()
+
 
 if ht_analysis:
     hitting_times_lower1 = []
@@ -331,29 +338,23 @@ if ht_analysis:
 
     for j in range(batch_size):
 
-        y1_numpy = y[j,0 :].detach().numpy()
-
-        x_numpy = x[j, 0, :].detach().numpy()  # Price process for batch element i
-
         # Check lower stopping barrier for y1
-        hit_lower1 = (y1_numpy <= lower_np[j, :]).nonzero()[0]
-        if len(hit_lower1) > 0:
-            hit_time1 = hit_lower1[0].item()
-            hitting_times_lower1.append(hit_time1)
-            actual_hitting_times_lower1.append(hit_time1)
-            prices_at_lower_stopping1.append(x_numpy[hit_time1])  # Store price at hitting time
-        else:
-            hitting_times_lower1.append(N)
+        hit_lower1 = np.argmax(y_np[j,:] <= lower_np[j, :]) if np.any((y_np[j,:] <= lower_np[j, :])) else 50
+        hitting_times_lower1.append(hit_lower1)
+        prices_at_lower_stopping1.append(x_np[hit_lower1])
+
+        if hit_lower1 < N:
+            actual_hitting_times_lower1.append(hit_lower1)
 
         # Check upper stopping barrier for y1
-        hit_upper1 = (y1_numpy >= upper_np[j, :]).nonzero()[0]
-        if len(hit_upper1) > 0:
-            hit_time1 = hit_upper1[0].item()
-            hitting_times_upper1.append(hit_time1)
-            actual_hitting_times_upper1.append(hit_time1)
-            prices_at_upper_stopping1.append(x_numpy[hit_time1])  # Store price at hitting time
-        else:
-            hitting_times_upper1.append(N)
+        hit_upper1 = np.argmax(y_np[j,:] >= upper_np[j, :]) if np.any((y_np[j,:] >= upper_np[j, :])) else 50
+        hitting_times_upper1.append(hit_upper1)
+        prices_at_upper_stopping1.append(x_np[hit_upper1])
+
+        if hit_upper1 < N:
+            actual_hitting_times_upper1.append(hit_upper1)
+
+
 
     hitting_times_lower1 = np.array(hitting_times_lower1)
     hitting_times_upper1 = np.array(hitting_times_upper1)
