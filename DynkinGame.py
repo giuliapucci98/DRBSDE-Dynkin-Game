@@ -232,6 +232,9 @@ else:
     with open(path + "loss.json", 'r') as f:
         loss = json.load(f)
 
+    with open(path + "Y0.json", 'r') as f:
+        Y0 = json.load(f)
+
     model = Model(equation, dim_h)
     model.eval()
     result = Result(model, equation)
@@ -289,6 +292,15 @@ else:
     plt.tight_layout()
     plt.savefig(graph_path + "loss_grid.png")
     plt.show()
+
+
+####### Y0
+
+    plt.hist(Y0, bins=10, alpha=0.5, label=r'Exit times for Player 1')
+    plt.grid(True)
+    plt.savefig(graph_path + "Y0")
+    plt.show()
+
 
     j = np.random.randint(batch_size)
 
