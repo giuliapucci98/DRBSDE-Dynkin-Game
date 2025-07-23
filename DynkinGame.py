@@ -2,7 +2,8 @@ import torch
 import numpy as np
 import os
 import json
-import pandas as pd
+import csv
+import time
 
 from networkx.utils.decorators import np_random_state
 
@@ -35,9 +36,9 @@ print(device)
 
 
 mode = "Training"
-#mode = "Testing"
+mode = "Testing"
 ht_analysis = True
-#ht_analysis = False
+#ht_analysis=False
 
 
 def b(t, x):
@@ -155,18 +156,27 @@ if mode == "Training":
 
 
 
-    params = pd.read_csv('Calibration/calibrated_parameters.csv')
+    #params = pd.read_csv('Calibration/calibrated_parameters.csv')
 
-    kappa = params["kappa"].values.tolist()
-    mu = params["mu"].values.tolist()
-    sig = params["sigma"].values.tolist()
+    #kappa = params["kappa"].values.tolist()
+    #mu = params["mu"].values.tolist()
+    #sig = params["sigma"].values.tolist()
+
+    kappa, mu, sig, x0_value = [], [], [], []
+
+    with open('Calibration/calibrated_parameters.csv', 'r') as p:
+        reader = csv.DictReader(p)
+        for row in reader:
+            kappa.append(float(row['kappa']))
+            mu.append(float(row['mu']))
+            sig.append(float(row['sigma']))
+            x0_value.append(float(row['x0']))
+
 
     dim_x = len(kappa)
     dim_d = dim_x
 
-    x0_value = params["x0"].values.tolist()  # initial price
-
-    strike = params["mu"].values + np.random.random(dim_x) * 0.2 + 0.9
+    strike = mu + np.random.random(dim_x) * 0.2 + 0.9
     strike_t = torch.tensor(strike, device=device)
     strike = strike.tolist()
 
@@ -202,7 +212,7 @@ if mode == "Training":
         "l": l,
     }
 
-    x_0 = torch.tensor(x0_value)
+    x_0 = torch.tensor(x0_value, dtype=torch.float32, device=device)
     #x_0[0] = x0_value
     #x_0[1] = x0_value1
 
@@ -219,10 +229,13 @@ if mode == "Training":
     Y0=[]
     f1 = []
     f2 = []
-    for i in range(1):
+    for i in range(100):
         print(f"iteration n {i}")
-        loss, y  = bsde_itr.train_whole(batch_size, N, path, itr, multiplier)
-        Y0.append(float(y[0, 0]))
+
+        start_time = time.time()
+        loss, y = bsde_itr.train_whole(batch_size, N, path, itr, multiplier)
+        end_time = time.time()
+        print(f"Iteration {i} took {(end_time - start_time) / 60:.4f} minutes")
 
     with open(path + "loss.json", 'w') as f:
         json.dump(loss, f, indent=2)
@@ -232,6 +245,7 @@ if mode == "Training":
 
 else:
     import matplotlib.pyplot as plt
+    import pandas as pd
 
     with open(os.path.join(path, "params.json"), "r") as h:
         loaded_params = json.load(h)
@@ -331,7 +345,7 @@ else:
     plt.plot(itr_ax_fine, loss[0])
     plt.savefig(graph_path + "loss_N-1.png")
     plt.show()
-
+    plt.close()
 
 ####### Y0
 
@@ -341,7 +355,7 @@ else:
     plt.axvline(mean_Y0, color='red', linestyle='dashed', linewidth=2, label=f'Mean = {mean_Y0:.2f}')
     plt.savefig(graph_path + "Y0_hist")
     plt.show()
-
+    plt.close()
 
     j = np.random.randint(batch_size)
 
@@ -357,6 +371,7 @@ else:
     plt.tight_layout()
     plt.savefig(graph_path + f"x_{j}.png")
     plt.show()
+    plt.close()
 
     j = np.random.randint(batch_size)
     k = np.random.randint(batch_size)
@@ -369,7 +384,7 @@ else:
     ax.plot(t, upper_np[j, :], color="black", linestyle='--', label="Upper barrier")
     ax.plot(t, lower_np[j, :], color="green", linestyle='--', label="Lower barrier")
     # Add legend and title
-    ax.legend(loc="upper right")
+    #ax.legend(loc="upper right")
     plt.tight_layout()
     plt.savefig(graph_path + str(j))
     plt.show()
@@ -434,7 +449,7 @@ if ht_analysis:
 
     plt.hist(actual_hitting_times_lower_time1, bins=10, alpha=0.5, label=r'Hitting times Lower barrier')
     plt.hist(actual_hitting_times_upper_time1, bins=10, alpha=0.5, label=r'Hitting times Upper barrier')
-    plt.legend()
+    #plt.legend()
     plt.grid(True)
     plt.savefig(graph_path + "hitting_times")
     plt.show()
