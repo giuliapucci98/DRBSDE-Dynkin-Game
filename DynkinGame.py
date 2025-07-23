@@ -2,21 +2,22 @@ import torch
 import numpy as np
 import os
 import json
+import pandas as pd
 
 from networkx.utils.decorators import np_random_state
-'''
+
 from DRBSDE import fbsde
 from DRBSDE import BSDEiter
 from DRBSDE import Model
 from DRBSDE import Result
-'''
+
 
 
 path = "state_dicts/"
 
 
 new_folder_flag = True
-new_folder = "Benchmark/"
+new_folder = "MultiCfD/"
 
 if new_folder_flag:
     path = new_folder + path
@@ -34,8 +35,9 @@ print(device)
 
 
 mode = "Training"
-mode = "Testing"
+#mode = "Testing"
 ht_analysis = True
+#ht_analysis = False
 
 
 def b(t, x):
@@ -60,10 +62,11 @@ def sigma(t, x):
 def f(t, x, y, z):
     #CfD
     #c_0 = torch.ones(dim_x, device = device )*np.exp(x0_value)
+    value = (strike_t+  - x) * np.exp(-rho * t)
 
     #Benchmark example
-    c_0 = torch.zeros(dim_x, device = device)
-    value = 10*(c_0 - x)* np.exp(-rho * t)
+    #c_0 = torch.zeros(dim_x, device = device)
+    #value = 10*(c_0 - x)* np.exp(-rho * t)
     #output: [batch_size, dim_y]
     return torch.mean(value, dim=-1, keepdim=True)
     #return value1
@@ -126,10 +129,10 @@ if mode == "Training":
     T = 1
     u = 1.56  # upper barrier
     l = 0.31  # lower barrier
-'''
+    '''
     ############################
     #BENCHMARK EXAMPLE
-
+    '''
     kappa = 1.5 + np.random.random(dim_x)
     kappa = kappa.tolist()
 
@@ -148,8 +151,37 @@ if mode == "Training":
     T = 1
     x0_value= 0
     x_0 = torch.ones(dim_x)*x0_value
+    '''
 
 
+
+    params = pd.read_csv('Calibration/calibrated_parameters.csv')
+
+    kappa = params["kappa"].values.tolist()
+    mu = params["mu"].values.tolist()
+    sig = params["sigma"].values.tolist()
+
+    dim_x = len(kappa)
+    dim_d = dim_x
+
+    x0_value = params["x0"].values.tolist()  # initial price
+
+    strike = params["mu"].values + np.random.random(dim_x) * 0.2 + 0.9
+    strike_t = torch.tensor(strike, device=device)
+    strike = strike.tolist()
+
+
+
+
+    c_0 = np.exp(x0_value)
+        # c_0 = x0_value
+
+    rho = 0.04
+    T = 1
+    u = 1.20  # upper barrier
+    l = 0.1  # lower barrier
+
+################################################
     run_parameters = {
         "dim_x": dim_x,
         "dim_y": dim_y,
@@ -164,12 +196,13 @@ if mode == "Training":
         "mu": mu,
         "sig": sig,
         "rho": rho,
+        "K": strike,
         "T": T,
         "u": u,
         "l": l,
     }
 
-    x_0 = torch.ones(dim_x, device=device)*x0_value
+    x_0 = torch.tensor(x0_value)
     #x_0[0] = x0_value
     #x_0[1] = x0_value1
 
@@ -225,7 +258,8 @@ else:
 
 
 
-    x_0 = torch.ones(dim_x, device=device)*x0_value
+    #x_0 = torch.ones(dim_x, device=device)*x0_value
+    x_0 = torch.tensor(x0_value, device=device)
 
     equation = fbsde(x_0, b, sigma, f, g, lower_barrier, upper_barrier, T, dim_x, dim_y, dim_d)
 
@@ -328,8 +362,9 @@ else:
     k = np.random.randint(batch_size)
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
     colors = ['red', 'blue']
-    ax.plot(t, y[j, 0, :].detach().numpy(), color=colors[0], linestyle='-', label=f"Y realization {j}")
-    ax.plot(t, y[k, 0, :].detach().numpy(), color=colors[1], linestyle='-', label=f"Y realization {k}")
+    for i in range(20):
+        ax.plot(t, y[i, 0, :].detach().numpy(), color="red", linestyle='-', label=f"Y realization {i}")
+
     # Plot upper and lower barriers (use j from np.random if you want consistency)
     ax.plot(t, upper_np[j, :], color="black", linestyle='--', label="Upper barrier")
     ax.plot(t, lower_np[j, :], color="green", linestyle='--', label="Lower barrier")
