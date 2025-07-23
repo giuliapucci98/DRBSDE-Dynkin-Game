@@ -36,9 +36,9 @@ print(device)
 
 
 mode = "Training"
-mode = "Testing"
-ht_analysis = True
-#ht_analysis=False
+#mode = "Testing"
+#ht_analysis = True
+ht_analysis=False
 
 
 def b(t, x):
@@ -229,19 +229,21 @@ if mode == "Training":
     Y0=[]
     f1 = []
     f2 = []
-    for i in range(100):
+    for i in range(2):
         print(f"iteration n {i}")
 
         start_time = time.time()
         loss, y = bsde_itr.train_whole(batch_size, N, path, itr, multiplier)
         end_time = time.time()
+        Y0.append(float(y[0, 0]))
         print(f"Iteration {i} took {(end_time - start_time) / 60:.4f} minutes")
 
-    with open(path + "loss.json", 'w') as f:
-        json.dump(loss, f, indent=2)
 
-    with open(path + "Y0.json", 'w') as f:
-        json.dump(Y0, f, indent=2)
+    with open(path + "loss.json", 'w') as p:
+        json.dump(loss, p, indent=2)
+
+    with open(path + "Y0.json", 'w') as p:
+        json.dump(Y0, p, indent=2)
 
 else:
     import matplotlib.pyplot as plt
