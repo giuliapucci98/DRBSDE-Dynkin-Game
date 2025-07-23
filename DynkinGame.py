@@ -16,7 +16,7 @@ path = "state_dicts/"
 
 
 new_folder_flag = True
-new_folder = "Comparison/"
+new_folder = "Benchmark/"
 
 if new_folder_flag:
     path = new_folder + path
@@ -293,12 +293,19 @@ else:
     plt.savefig(graph_path + "loss_grid.png")
     plt.show()
 
+    plt.figure(figsize=(10, 8))
+    plt.plot(itr_ax_fine, loss[0])
+    plt.savefig(graph_path + "loss_N-1.png")
+    plt.show()
+
 
 ####### Y0
 
     plt.hist(Y0, bins=10, alpha=0.5, label=r'Exit times for Player 1')
     plt.grid(True)
-    plt.savefig(graph_path + "Y0")
+    mean_Y0 = np.mean(Y0)
+    plt.axvline(mean_Y0, color='red', linestyle='dashed', linewidth=2, label=f'Mean = {mean_Y0:.2f}')
+    plt.savefig(graph_path + "Y0_hist")
     plt.show()
 
 
@@ -318,18 +325,19 @@ else:
     plt.show()
 
     j = np.random.randint(batch_size)
-    fig, axes = plt.subplots(1, 1, figsize=(8, 6), sharex=True)
-    # Plot Y_1 (dim 0)
-    for j in range(20):
-        plt.plot(t, y[j, 0, :].detach().numpy(), color="red", label="Y_1")
-    plt.plot(t, upper_np[j,:], color="blue")
-    plt.plot(t, lower_np[j,:], color="green")
-    #axes[0].legend(loc="upper right")
-    plt.title("Y")
+    k = np.random.randint(batch_size)
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    colors = ['red', 'blue']
+    ax.plot(t, y[j, 0, :].detach().numpy(), color=colors[0], linestyle='-', label=f"Y realization {j}")
+    ax.plot(t, y[k, 0, :].detach().numpy(), color=colors[1], linestyle='-', label=f"Y realization {k}")
+    # Plot upper and lower barriers (use j from np.random if you want consistency)
+    ax.plot(t, upper_np[j, :], color="black", linestyle='--', label="Upper barrier")
+    ax.plot(t, lower_np[j, :], color="green", linestyle='--', label="Lower barrier")
+    # Add legend and title
+    ax.legend(loc="upper right")
     plt.tight_layout()
     plt.savefig(graph_path + str(j))
     plt.show()
-
 
 if ht_analysis:
     hitting_times_lower1 = []
@@ -348,23 +356,29 @@ if ht_analysis:
     actual_hitting_times_upper2 = []
     prices_at_upper_stopping2 = []
 
+    f1=[]
+    f2=[]
+
+
     for j in range(batch_size):
 
         # Check lower stopping barrier for y1
         hit_lower1 = np.argmax(y_np[j,:] <= lower_np[j, :]) if np.any((y_np[j,:] <= lower_np[j, :])) else 50
         hitting_times_lower1.append(hit_lower1)
-        prices_at_lower_stopping1.append(x_np[hit_lower1])
+
 
         if hit_lower1 < N:
             actual_hitting_times_lower1.append(hit_lower1)
+            prices_at_lower_stopping1.append(x_np[j,0,hit_lower1])
 
         # Check upper stopping barrier for y1
         hit_upper1 = np.argmax(y_np[j,:] >= upper_np[j, :]) if np.any((y_np[j,:] >= upper_np[j, :])) else 50
         hitting_times_upper1.append(hit_upper1)
-        prices_at_upper_stopping1.append(x_np[hit_upper1])
+
 
         if hit_upper1 < N:
             actual_hitting_times_upper1.append(hit_upper1)
+            prices_at_upper_stopping1.append(x_np[j,0,hit_upper1])
 
 
 
@@ -383,13 +397,37 @@ if ht_analysis:
     number_exit_times_lower1 = len(actual_hitting_times_lower1)
     number_exit_times_upper1 = len(actual_hitting_times_upper1)
 
-    plt.hist(actual_hitting_times_lower_time1, bins=10, alpha=0.5, label=r'Exit times for Player 1')
-    plt.hist(actual_hitting_times_upper_time1, bins=10, alpha=0.5, label=r'Exit times for Player 0')
+    plt.hist(actual_hitting_times_lower_time1, bins=10, alpha=0.5, label=r'Hitting times Lower barrier')
+    plt.hist(actual_hitting_times_upper_time1, bins=10, alpha=0.5, label=r'Hitting times Upper barrier')
     plt.legend()
     plt.grid(True)
     plt.savefig(graph_path + "hitting_times")
     plt.show()
 
+    f1.append(len(actual_hitting_times_upper1) / batch_size)
+    f2.append(len(actual_hitting_times_lower1) / batch_size)
+
+    f1_np = np.array(f1)
+    f2_np = np.array(f2)
+    print(f"Percentage of exits for player 1: {f1_np.mean():.4f}")
+    print(f"Percentage of exits for player 2: {f2_np.mean():.4f}")
+
+    mean_lower = np.mean(actual_hitting_times_lower_time1)
+    mean_upper = np.mean(actual_hitting_times_upper_time1)
+    print(mean_lower)
+    print(mean_upper)
+
+
+    # plt.figure(figsize=(8,5))
+    plt.scatter(actual_hitting_times_lower1, np.array(prices_at_lower_stopping1), color='blue', alpha=0.5,
+                label="Player 2 Stops")
+    plt.scatter(actual_hitting_times_upper1, np.array(prices_at_upper_stopping1), color='red', alpha=0.5,
+                label="Player 1 Stops")
+    plt.xlabel("Time")
+    plt.ylabel("Electricity Price")
+    plt.legend(loc="lower right")
+    plt.savefig(graph_path + "times_price_scatter")
+    plt.show()
 
 '''
 for j in range(batch_size):
