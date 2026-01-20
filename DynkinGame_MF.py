@@ -18,7 +18,7 @@ from DRBSDE_MF import BSDEiter_MF
 path_base = "state_dicts/"
 
 new_folder_flag = True
-new_folder = "New_model_benchmark/"
+new_folder = "New_model_benchmark_mu_nonzero2_dim5/"
 
 folder_explicit = os.path.join(new_folder, "Explicit/")
 folder_empirical = os.path.join(new_folder, "Empirical/")
@@ -45,7 +45,7 @@ def b(t, x):
     beta_t = torch.tensor(beta, dtype=torch.float32, device=device)
     x0_t = torch.tensor(x0_value, device=device)
     # deterministic mean m_t
-    m_t =  mu_t + (x0_t-mu_t) * torch.exp((-kappa_t + beta_t) * t)
+    m_t =  mu_t + (x0_t-mu_t) * torch.exp(-kappa_t * ( 1 - beta_t) * t)
     drift = kappa_t * (-x + mu_t*(1-beta_t) + beta_t * m_t)
     return drift
 
@@ -67,12 +67,27 @@ def sigma(t, x):
 
 def f(t, x, y, z):
     #CfD
-    c_0 = torch.ones(dim_x, device = device )*np.exp(x0_value)
-    value = (strike_t +  - x) * np.exp(-rho * t)
+    #c_0 = torch.ones(dim_x, device = device )*np.exp(x0_value)
+    #value = (strike_t +  - x) * np.exp(-rho * t)
+    #Benchmark example    mu_t = torch.tensor(mu, dtype=torch.float32, device=device)
+    mu_t = torch.tensor(mu, dtype=torch.float32, device=device)
+    kappa_t = torch.tensor(kappa, dtype=torch.float32, device=device)
+    beta_t = torch.tensor(beta, dtype=torch.float32, device=device)
+    x0_t = torch.tensor(x0_value, device=device)
+    # deterministic mean m_t
+    m_t =  mu_t + (x0_t-mu_t) * torch.exp(-kappa_t * ( 1 - beta_t) * t)
+    value =  10*(m_t- x)* np.exp(-rho * t)
+    ##output: [batch_size, dim_y]
+    return torch.mean(value, dim=-1, keepdim=True)
+    #return value1
 
-    #Benchmark example
-    #c_0 = torch.zeros(dim_x, device = device)
-    #value = 10*(c_0 - x)* np.exp(-rho * t)
+def f_empirical(t, x, y, z):
+    #CfD
+    #c_0 = torch.ones(dim_x, device = device )*np.exp(x0_value)
+    #value = (strike_t +  - x) * np.exp(-rho * t)
+    # deterministic mean m_t
+    m_t = x.mean(dim=0)
+    value = 10*(m_t-x)* np.exp(-rho * t)
     ##output: [batch_size, dim_y]
     return torch.mean(value, dim=-1, keepdim=True)
     #return value1
@@ -116,10 +131,10 @@ def run_solver( label, save_path, bsde_itr):
 
 if mode == "Training":
 
-    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 24, 1, 24, 100, 50, 100, 2 ** 10
+    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 20, 1, 20, 100, 50, 100, 2**12
     multiplier = 5
 
-    '''
+
 #benchmark parameters
     ###################################
     kappa = 1.5 + np.random.random(dim_x)
@@ -128,7 +143,7 @@ if mode == "Training":
     beta = np.random.random(dim_x) #0.5*np.ones(dim_x)
     beta = beta.tolist()
 
-    mu = np.zeros(dim_x)
+    mu = -0.5 + np.random.random(dim_x) #np.zeros(dim_x)
     mu = mu.tolist()
 
     sig = np.ones(dim_x)
@@ -138,8 +153,8 @@ if mode == "Training":
     dt = T/N
 
     rho = 0
-    u = 0.5 #upper barrier
-    l = 0.5 #lower barrier
+    u = 0.7 #upper barrier
+    l = 0.7 #lower barrier
     T = 1
     x0_value= 0
     x_0 = torch.ones(dim_x)*x0_value
@@ -181,7 +196,7 @@ if mode == "Training":
     T = 1
     u = 1.20  # upper barrier
     l = 0.1  # lower barrier
-
+    '''
 
 ################################################
     run_parameters = {
@@ -213,7 +228,7 @@ if mode == "Training":
     equation_explicit = fbsde(x_0, b, sigma, f, g, lower_barrier, upper_barrier,
                               T, dim_x, dim_y, dim_d)
 
-    equation_empirical = fbsde(x_0, b_empirical, sigma, f, g, lower_barrier, upper_barrier,
+    equation_empirical = fbsde(x_0, b_empirical, sigma, f_empirical, g, lower_barrier, upper_barrier,
                                T, dim_x, dim_y, dim_d)
 
     bsde_itr = BSDEiter(equation_explicit, dim_h)
@@ -349,9 +364,9 @@ else:
     plt.show()
 
     plt.figure(figsize=(10, 8))
-    plt.plot(itr_ax_fine, loss_exp[0], color ='blue', label='Explicit')
-    plt.plot(itr_ax_fine, loss_emp[0], color='red', linestyle='--', label='Empirical')
-    plt.savefig(graph_path + "loss_N-1.png")
+    plt.plot(itr_ax_fine, loss_exp[1], color ='blue',linestyle='--', label='Explicit')
+    plt.plot(itr_ax_fine, loss_emp[1], color='blue', label='Empirical')
+    plt.savefig(graph_path + "loss_N-2.png")
     plt.show()
     plt.close()
 
