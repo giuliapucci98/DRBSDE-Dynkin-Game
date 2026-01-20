@@ -11,11 +11,14 @@ from DRBSDE import fbsde
 from DRBSDE import BSDEiter
 from DRBSDE import Model
 from DRBSDE import Result
+from DRBSDE_MF import Model_MF
+from DRBSDE_MF import Result_MF
+from DRBSDE_MF import BSDEiter_MF
 
 path_base = "state_dicts/"
 
 new_folder_flag = True
-new_folder = "MeanField_4/"
+new_folder = "New_model_benchmark/"
 
 folder_explicit = os.path.join(new_folder, "Explicit/")
 folder_empirical = os.path.join(new_folder, "Empirical/")
@@ -37,21 +40,23 @@ ht_analysis=False
 
 def b(t, x):
     # x: shape [batch_size, dim_x]
+    mu_t = torch.tensor(mu, dtype=torch.float32, device=device)
     kappa_t = torch.tensor(kappa, dtype=torch.float32, device=device)
     beta_t = torch.tensor(beta, dtype=torch.float32, device=device)
     x0_t = torch.tensor(x0_value, device=device)
     # deterministic mean m_t
-    m_t = x0_t * torch.exp((-kappa_t + beta_t) * t)
-    drift = -kappa_t * x + beta_t * m_t
+    m_t =  mu_t + (x0_t-mu_t) * torch.exp((-kappa_t + beta_t) * t)
+    drift = kappa_t * (-x + mu_t*(1-beta_t) + beta_t * m_t)
     return drift
 
 def b_empirical(t, X):
     # mean-field drift (McKean-Vlasov)
+    mu_t = torch.tensor(mu, dtype=torch.float32, device=device)
     kappa_t = torch.tensor(kappa, dtype=torch.float32, device=device)
     beta_t = torch.tensor(beta, dtype=torch.float32, device=device)
     # empirical mean over batch
     m_t = X.mean(dim=0)
-    drift = -kappa_t * X + beta_t * m_t
+    drift = kappa_t * (-X + mu_t*(1-beta_t) + beta_t * m_t)
     return drift
 
 def sigma(t, x):
@@ -62,13 +67,13 @@ def sigma(t, x):
 
 def f(t, x, y, z):
     #CfD
-    #c_0 = torch.ones(dim_x, device = device )*np.exp(x0_value)
-    #value = (strike_t +  - x) * np.exp(-rho * t)
+    c_0 = torch.ones(dim_x, device = device )*np.exp(x0_value)
+    value = (strike_t +  - x) * np.exp(-rho * t)
 
     #Benchmark example
-    c_0 = torch.zeros(dim_x, device = device)
-    value = 10*(c_0 - x)* np.exp(-rho * t)
-    output: [batch_size, dim_y]
+    #c_0 = torch.zeros(dim_x, device = device)
+    #value = 10*(c_0 - x)* np.exp(-rho * t)
+    ##output: [batch_size, dim_y]
     return torch.mean(value, dim=-1, keepdim=True)
     #return value1
 
@@ -85,9 +90,8 @@ def upper_barrier(t,x): #upper barrier = when player 1 stops
     #return torch.ones(batch_size, dim_y) * (2) * np.exp(-rho * t)
 
 
-def run_solver(equation, label, save_path):
+def run_solver( label, save_path, bsde_itr):
     print(f"=== Running solver for: {label} ===")
-    bsde_itr = BSDEiter(equation, dim_h)
 
     Y0_list = []
     y_list = []
@@ -112,14 +116,16 @@ def run_solver(equation, label, save_path):
 
 if mode == "Training":
 
-    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 1, 1, 1, 100, 50, 100, 2 ** 10
+    dim_x, dim_y, dim_d, dim_h, N, itr, batch_size = 24, 1, 24, 100, 50, 100, 2 ** 10
     multiplier = 5
 
+    '''
+#benchmark parameters
     ###################################
     kappa = 1.5 + np.random.random(dim_x)
     kappa = kappa.tolist()
 
-    beta = 1.0 + np.random.random(dim_x)
+    beta = np.random.random(dim_x) #0.5*np.ones(dim_x)
     beta = beta.tolist()
 
     mu = np.zeros(dim_x)
@@ -132,12 +138,50 @@ if mode == "Training":
     dt = T/N
 
     rho = 0
-    u = 0.7 #upper barrier
-    l = 0.7 #lower barrier
+    u = 0.5 #upper barrier
+    l = 0.5 #lower barrier
     T = 1
     x0_value= 0
     x_0 = torch.ones(dim_x)*x0_value
     strike = 0
+
+    '''
+#cfd parameters
+#params = pd.read_csv('Calibration/calibrated_parameters.csv')
+
+    #kappa = params["kappa"].values.tolist()
+    #mu = params["mu"].values.tolist()
+    #sig = params["sigma"].values.tolist()
+
+    kappa, mu, sig, x0_value = [], [], [], []
+    with open('Calibration/calibrated_parameters.csv', 'r') as p:
+        reader = csv.DictReader(p)
+        for row in reader:
+            kappa.append(float(row['kappa']))
+            mu.append(float(row['mu']))
+            sig.append(float(row['sigma']))
+            x0_value.append(float(row['x0']))
+
+
+    dim_x = len(kappa)
+    dim_d = dim_x
+
+    beta = 0.5 * np.ones(dim_x)
+    beta = beta.tolist()
+
+    strike = mu + np.random.random(dim_x) * 0.2 + 0.9
+    strike_t = torch.tensor(strike, device=device)
+    strike = strike.tolist()
+
+
+    c_0 = np.exp(x0_value)
+        # c_0 = x0_value
+
+    rho = 0.04
+    T = 1
+    u = 1.20  # upper barrier
+    l = 0.1  # lower barrier
+
 
 ################################################
     run_parameters = {
@@ -172,8 +216,11 @@ if mode == "Training":
     equation_empirical = fbsde(x_0, b_empirical, sigma, f, g, lower_barrier, upper_barrier,
                                T, dim_x, dim_y, dim_d)
 
-    Y0_explicit, y_explicit = run_solver(equation_explicit, "Explicit", folder_explicit)
-    Y0_empirical, y_empirical = run_solver(equation_empirical, "Empirical", folder_empirical)
+    bsde_itr = BSDEiter(equation_explicit, dim_h)
+    bsde_itr_MF = BSDEiter_MF(equation_empirical, dim_h)
+
+    Y0_explicit, y_explicit = run_solver( "Explicit", folder_explicit, bsde_itr)
+    Y0_empirical, y_empirical = run_solver( "Empirical", folder_empirical, bsde_itr_MF)
 
 else:
     import matplotlib.pyplot as plt
@@ -204,8 +251,10 @@ else:
     l = loaded_params["l"]
 
 
-    #x_0 = torch.ones(dim_x, device=device)*x0_value
-    x_0 = torch.tensor(x0_value, device=device)
+    x_0 = torch.ones(dim_x, device=device)*x0_value
+    #x_0 = torch.tensor(x0_value, device=device)
+
+    mf = True
 
     equation_explicit = fbsde(x_0, b, sigma, f, g, lower_barrier, upper_barrier,
                               T, dim_x, dim_y, dim_d)
@@ -224,17 +273,19 @@ else:
 
     model_exp = Model(equation_explicit, dim_h)
     model_exp.eval()
-    result = Result(model_exp, equation_explicit)
+    result_exp = Result(model_exp, equation_explicit)
 
-    model_emp = Model(equation_empirical, dim_h)
+    model_emp = Model_MF(equation_empirical, dim_h)
     model_emp.eval()
-    result = Result(model_emp, equation_empirical)
+    result_emp = Result_MF(model_emp, equation_empirical)
 
     flag = True
     while flag:
-        W = result.gen_b_motion(batch_size, N)
-        x = result.gen_x(batch_size, N, W)
-        flag = torch.isnan(x).any()
+        W = result_exp.gen_b_motion(batch_size, N)
+        x_exp = result_exp.gen_x(batch_size, N, W)
+        x_emp = result_emp.gen_x(batch_size, N, W)
+        flag = torch.isnan(x_emp).any()
+
 
     ###########################
     # Brownian motion
@@ -243,9 +294,9 @@ else:
     Wt[:, :, 0] = torch.zeros(batch_size, dim_d)
     ##########################################
 
-    y, z = result.predict(N, batch_size, x, folder_explicit)
+    y, z = result_exp.predict(N, batch_size, x_exp, folder_explicit)
 
-    y_emp, z_emp = result.predict(N, batch_size, x, folder_empirical)
+    y_emp, z_emp = result_emp.predict(N, batch_size, x_emp, folder_empirical)
 
     ############################################
     # Hitting times analysis
@@ -254,12 +305,12 @@ else:
     t = torch.linspace(0, T, N)
     ############################
 
-    x_np = x.detach().numpy()  # Shape: (batch_size, dim_x, N)
+    x_np = x_exp.detach().numpy()  # Shape: (batch_size, dim_x, N)
     y_np = y.detach().numpy()  # Shape: (batch_size, dim_y, N)
     z_np = z.detach().numpy()
 
-    lower_np = lower_barrier(t, x).detach().numpy()
-    upper_np = upper_barrier(t, x).detach().numpy()
+    lower_np = lower_barrier(t, x_exp).detach().numpy()
+    upper_np = upper_barrier(t, x_exp).detach().numpy()
 
     ####### PLOTS ###############################
     # loss analysis
@@ -298,9 +349,9 @@ else:
     plt.show()
 
     plt.figure(figsize=(10, 8))
-    plt.plot(itr_ax_coarse, loss_exp[2], color ='blue', label='Explicit')
-    plt.plot(itr_ax_coarse, loss_emp[2], color='red', linestyle='--', label='Empirical')
-    plt.savefig(graph_path + "loss_N-3.png")
+    plt.plot(itr_ax_fine, loss_exp[0], color ='blue', label='Explicit')
+    plt.plot(itr_ax_fine, loss_emp[0], color='red', linestyle='--', label='Empirical')
+    plt.savefig(graph_path + "loss_N-1.png")
     plt.show()
     plt.close()
 
@@ -348,12 +399,12 @@ else:
     j = np.random.randint(batch_size)
     k = np.random.randint(batch_size)
 
-    random_indices = np.random.choice(batch_size, size=2, replace=False)
-    colors = ['red', 'blue', 'green', 'yellow']  # add more colors if you have more y realizations
+    random_indices = np.random.choice(batch_size, size=3, replace=False)
+    colors = ['red', 'blue',  'orange']  # add more colors if you have more y realizations
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
     for i, idx in enumerate(random_indices):
-        ax.plot(t, y[idx, 0, :].detach().numpy(), color=colors[i], linestyle='-', label=f"Y realization {i}")
-        ax.plot(t, y_emp[idx, 0, :].detach().numpy(), color=colors[i], linestyle='--', label=f"Y realization {i}")
+        ax.plot(t, y[idx, 0, :].detach().numpy(), color=colors[i], linestyle='--', label=f"Y realization {i}")
+        ax.plot(t, y_emp[idx, 0, :].detach().numpy(), color=colors[i], linestyle='-', label=f"Y realization {i}")
 
     # Plot upper and lower barriers (use j from np.random if you want consistency)
     ax.plot(t, upper_np[j, :], color="black", linestyle='--', label="Upper barrier")
